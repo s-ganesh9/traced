@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>loop.habits</title>
+<style>html,body{margin:0}html{background:var(--bg)}</style>
+</head>
+<body>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: one narrow column. Day, date and year on top, ten tasks with a tick each, then a pie and a month of boxes. */
+/* Seven Windows cmd "color" codes on black: 9 a b c d e f. Default is a (bright green). Text and "done" share one colour, like a console. */
+:root{
+  --bg:#000000; --panel:#031403; --fg:#00ff00; --dim:#22b422; --line:#0d3d0d;
+  --accent:#00ff00; --done:#00ff00; --miss:#a63232; --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+:root[data-skin="9"]{--panel:#05091a;--fg:#6f8fff;--dim:#5a78d8;--line:#14213f;--accent:#6f8fff}
+:root[data-skin="b"]{--panel:#021414;--fg:#00ffff;--dim:#20b8b8;--line:#0a3a3a;--accent:#00ffff}
+:root[data-skin="c"]{--panel:#140404;--fg:#ff5555;--dim:#d04444;--line:#3d1212;--accent:#ff5555}
+:root[data-skin="d"]{--panel:#140414;--fg:#ff66ff;--dim:#c24ac2;--line:#3d123d;--accent:#ff66ff}
+:root[data-skin="e"]{--panel:#141402;--fg:#ffff33;--dim:#b8b820;--line:#3a3a0a;--accent:#ffff33}
+:root[data-skin="f"]{--panel:#111111;--fg:#ffffff;--dim:#a0a0a0;--line:#333333;--accent:#ffffff}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--mono);-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+input{caret-color:var(--accent)}
+.cmd{font-size:.85rem;color:var(--dim);margin-bottom:14px;overflow-wrap:anywhere}
+.cmd .cur{display:inline-block;width:.6em;height:1em;background:var(--accent);vertical-align:text-bottom;margin-left:3px}
+@media (prefers-reduced-motion:no-preference){.cmd .cur{animation:blink 1.1s steps(1) infinite}}
+@keyframes blink{50%{opacity:0}}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:24px 56px}
+.dim{color:var(--dim)}
+
+.top{display:flex;flex-direction:column;gap:2px}
+.dow{font-size:2.4rem;font-weight:700;line-height:1.1;overflow-wrap:anywhere}
+.dateline{font-size:1.15rem;color:var(--accent);font-weight:500}
+.nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.btn{background:transparent;border:1px solid var(--line);padding:4px 12px;min-height:34px}
+.btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+#tag{font-size:.8rem}
+
+.lbl{margin:30px 0 10px;font-size:.85rem;font-weight:400;color:var(--dim)}
+.lbl b{color:var(--accent);font-weight:500}
+.tasks{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.task{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.tick{width:40px;height:40px;border:1px solid var(--line);background:transparent;font-size:1.3rem;font-weight:700;line-height:1;padding:0;color:transparent}
+.tick:hover{border-color:var(--accent)}
+.task.done .tick{background:var(--done);border-color:var(--done);color:#000}
+.name{width:100%;min-width:0;background:transparent;border:0;border-bottom:1px dashed transparent;padding:6px 2px;border-radius:0}
+.name:hover{border-bottom-color:var(--line)}
+.name:focus{outline:none;border-bottom-color:var(--accent)}
+.name::placeholder{color:var(--dim)}
+.task.done .name{color:var(--dim);text-decoration:line-through}
+.hint{margin:8px 0 0;font-size:.8rem;color:var(--dim)}
+
+.stats{display:flex;flex-wrap:wrap;align-items:center;gap:18px 26px}
+.pie{width:132px;height:132px;border-radius:50%;flex:none;background:conic-gradient(var(--done) 0 var(--p,0%),var(--miss) 0);border:1px solid var(--line)}
+.leg{display:grid;gap:6px;min-width:0}
+.leg .big{font-size:2rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:11px;height:11px;margin-right:8px;vertical-align:baseline;background:var(--line)}
+.sw.a{background:var(--done)}
+.sw.m{background:var(--miss)}
+.pie.empty{background:var(--line)!important}
+.leg div{font-variant-numeric:tabular-nums}
+
+.mhead{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.mhead span{flex:1;font-weight:500}
+.dows,.boxes{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.dows{margin-bottom:5px;font-size:.7rem;color:var(--dim);text-align:center}
+.box{aspect-ratio:1/1;width:100%;min-width:0;padding:0;border:1px solid var(--line);background:var(--line);font-size:.72rem;color:var(--dim);display:flex;align-items:flex-start;justify-content:flex-start;padding:3px 4px}
+.box.fut{background:transparent;border-style:dashed;cursor:default}
+.box.sel{outline:2px solid var(--fg);outline-offset:1px}
+.blank{aspect-ratio:1/1}
+.legend{display:flex;align-items:center;gap:4px;margin-top:10px;font-size:.75rem;color:var(--dim)}
+.legend i{width:11px;height:11px;display:inline-block;background:var(--line)}
+.themes{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px}
+.themes .lead{font-size:.8rem;color:var(--dim);margin-right:2px}
+.th{display:inline-flex;align-items:center;gap:7px;padding:3px 10px;background:transparent;border:1px solid var(--line);font-size:.78rem;min-height:30px}
+.th:hover{border-color:var(--dim)}
+.th[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.dot{width:11px;height:11px;background:var(--db);border:1px solid var(--line);position:relative;flex:none}
+.dot::after{content:"";position:absolute;inset:2px;background:var(--da)}
+.streak{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px;font-size:.85rem;color:var(--dim)}
+.streak b{color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
+.bk{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#btxt{display:block;width:100%;margin-top:10px;background:var(--panel);border:1px solid var(--line);padding:8px;font:inherit;font-size:.75rem;border-radius:0;resize:vertical;caret-color:var(--accent)}
+#btxt:focus{border-color:var(--accent);outline:none}
+#btxt[hidden],#bgorow[hidden]{display:none}
+#bgorow{margin-top:8px}
+.hmscroll{overflow-x:auto;padding-bottom:8px}
+.hminner{width:max-content}
+.hmm{display:grid;grid-template-columns:repeat(53,12px);gap:3px;height:16px;font-size:.7rem;color:var(--dim);margin-bottom:4px}
+.hmm span{white-space:nowrap}
+.hm{display:grid;grid-template-rows:repeat(7,12px);grid-auto-flow:column;grid-auto-columns:12px;gap:3px}
+.c{width:12px;height:12px;padding:0;border:0;background:var(--line)}
+.c.fut{background:transparent;cursor:default}
+.c.sel{outline:1px solid var(--fg);outline-offset:1px}
+/* Only two day colours: green = all tasks done (colour a), red = missed. Dashed = today, still open. Grey = before you started. */
+.box.done,.c.done,.legend i.done{background:var(--done)}
+.box.miss,.c.miss,.legend i.miss{background:var(--miss)}
+.box.done{color:#000;border-color:var(--done)}
+.box.miss{color:#ffd0d0;border-color:var(--miss)}
+.box.today{background:transparent;border:1px dashed var(--accent);color:var(--fg)}
+.c.today{background:transparent;border:1px dashed var(--accent)}
+.legend{gap:6px;flex-wrap:wrap}
+.legend i+span{margin-right:10px}
+footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--line);font-size:.8rem;color:var(--dim)}
+</style>
+
+<div class="wrap">
+  <div class="cmd" aria-hidden="true"><span id="cmdtxt">C:\Users\you&gt; color a</span><span class="cur"></span></div>
+  <header class="top">
+    <div class="dow" id="dow"></div>
+    <div class="dateline" id="dateline"></div>
+    <div class="nav">
+      <button class="btn" id="prev" aria-label="Previous day">&lt;</button>
+      <button class="btn" id="next" aria-label="Next day">&gt;</button>
+      <button class="btn" id="today">today</button>
+      <span class="dim" id="tag"></span>
+    </div>
+    <div class="streak" id="streak" aria-live="polite"></div>
+  </header>
+  <nav class="themes" id="themes" aria-label="Theme"></nav>
+
+  <h2 class="lbl"><b>$</b> tasks --daily</h2>
+  <ul class="tasks" id="tasks"></ul>
+  <p class="hint">Tap the box to mark a task done. Tap a task name to rename it. Keys 1 to 9 and 0 also tick tasks.</p>
+
+  <h2 class="lbl"><b>$</b> consistency --month</h2>
+  <div class="stats">
+    <div class="pie" id="pie" role="img" aria-label="Month consistency pie chart"></div>
+    <div class="leg" id="leg"></div>
+  </div>
+
+  <h2 class="lbl"><b>$</b> year --contrib</h2>
+  <div class="hmscroll" id="hmscroll">
+    <div class="hminner">
+      <div class="hmm" id="hmm" aria-hidden="true"></div>
+      <div class="hm" id="hm" role="img" aria-label="Daily completion for the last year"></div>
+    </div>
+  </div>
+  <div class="legend"><i class="done"></i><span>all tasks done</span><i class="miss"></i><span>missed</span><i></i><span>before you started</span></div>
+
+  <h2 class="lbl"><b>$</b> days --done</h2>
+  <div class="mhead">
+    <button class="btn" id="mprev" aria-label="Previous month">&lt;</button>
+    <span id="mlabel"></span>
+    <button class="btn" id="mnext" aria-label="Next month">&gt;</button>
+  </div>
+  <div class="dows"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+  <div class="boxes" id="boxes"></div>
+  <div class="legend"><i class="done"></i><span>all tasks done</span><i class="miss"></i><span>missed</span><i></i><span>before you started</span></div>
+
+  <h2 class="lbl"><b>$</b> backup</h2>
+  <div class="bk">
+    <button class="btn" id="bcopy">copy backup</button>
+    <button class="btn" id="brest">restore</button>
+    <span class="dim" id="bmsg" aria-live="polite"></span>
+  </div>
+  <textarea id="btxt" rows="5" spellcheck="false" aria-label="Backup text" hidden></textarea>
+  <div id="bgorow" hidden><button class="btn primary" id="bgo">load this backup</button></div>
+
+  <footer id="sync" aria-live="polite">[--] starting</footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s)};
+var esc=function(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var pad=function(n){return String(n).padStart(2,'0')};
+var key=function(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+var parseK=function(k){var p=k.split('-').map(Number);return new Date(p[0],p[1]-1,p[2])};
+var addDays=function(d,n){return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n)};
+var TODAY=new Date(), TK=key(TODAY), VK=TK, MK=TK.slice(0,7);
+var LSKEY='loop.habits.simple.v1';
+var DEFAULTS=['wake up early','exercise','read 20 pages','drink 3L water','study 2 hours','practice coding','write a journal','no junk food','walk 30 minutes','sleep by 11 pm'];
+var S=null;
+
+var SKINS=[
+  {id:'9',name:'color 9',a:'#6f8fff'},
+  {id:'a',name:'color a',a:'#00ff00'},
+  {id:'b',name:'color b',a:'#00ffff'},
+  {id:'c',name:'color c',a:'#ff5555'},
+  {id:'d',name:'color d',a:'#ff66ff'},
+  {id:'e',name:'color e',a:'#ffff33'},
+  {id:'f',name:'color f',a:'#ffffff'}
+];
+function fixSkin(){if(S.skin==='cmd')S.skin='a';if(!skinOk(S.skin))S.skin='a'}
+function skinOk(id){return SKINS.some(function(s){return s.id===id})}
+function fresh(){return {v:2,rev:0,start:TK,tasks:DEFAULTS.slice(),log:{},skin:'a'}}
+function valid(o){return o&&Array.isArray(o.tasks)&&o.tasks.length===10&&o.log&&typeof o.log==='object'&&typeof o.start==='string'}
+function loadLocal(){try{var o=JSON.parse(localStorage.getItem(LSKEY)||'null');return valid(o)?o:null}catch(e){return null}}
+
+/* ---------- logic ---------- */
+function named(i){return !!String(S.tasks[i]||'').trim()}
+function namedMask(){var m=0;for(var i=0;i<10;i++)if(named(i))m|=1<<i;return m}
+function pop(m){var c=0;while(m){c+=m&1;m>>=1}return c}
+function dayMask(k){return (S.log[k]||0)&namedMask()}
+function dayDone(k){return pop(dayMask(k))}
+function dayTotal(){return pop(namedMask())}
+function dayState(k){var t=dayTotal();if(!t||k<S.start)return 'none';if(dayDone(k)===t)return 'done';return k===TK?'today':'miss'}
+function monthStat(mk){
+  var y=+mk.slice(0,4), m=+mk.slice(5,7)-1, dim=new Date(y,m+1,0).getDate(), done=0, days=0;
+  for(var d=1;d<=dim;d++){
+    var k=mk+'-'+pad(d);
+    if(k>TK||k<S.start) continue;
+    days++; done+=dayDone(k);
+  }
+  return {done:done,total:days*dayTotal(),days:days};
+}
+
+/* ---------- persistence ---------- */
+var ref=null,saveTimer=null,saving=false,dirty=false;
+function setSync(kind){
+  $('#sync').textContent = kind==='synced'?'[ok] saved to your account'
+    : kind==='saving'?'[..] saving'
+    : kind==='local'?'[--] saved in this browser only'
+    : '[--] starting';
+}
+function persistLocal(){try{localStorage.setItem(LSKEY,JSON.stringify(S))}catch(e){}}
+function touch(){S.rev=Date.now();persistLocal();dirty=true;setSync(ref?'saving':'local');clearTimeout(saveTimer);saveTimer=setTimeout(flush,700)}
+function flush(){
+  if(!ref){setSync('local');return}
+  if(saving){clearTimeout(saveTimer);saveTimer=setTimeout(flush,400);return}
+  saving=true;dirty=false;
+  ref.set({s:JSON.stringify(S),rev:S.rev}).then(function(){setSync(dirty?'saving':'synced')},function(){setSync('local')}).then(function(){saving=false;if(dirty){clearTimeout(saveTimer);saveTimer=setTimeout(flush,400)}});
+}
+function bootSync(){
+  if(!(window.claude&&window.claude.use)){setSync('local');return}
+  Promise.all([window.claude.use('db'),window.claude.use('user')]).then(function(r){
+    var dbn=r[0],user=r[1];
+    if(!dbn||!user){setSync('local');return}
+    return user.id().then(function(uid){
+      if(!uid){setSync('local');return}
+      ref=dbn.doc('data/users/'+uid+'/simple');
+      return ref.get().then(function(snap){
+        var remote=null;
+        if(snap.exists){try{remote=JSON.parse(snap.data().s)}catch(e){}}
+        if(valid(remote)&&(remote.rev||0)>=(S.rev||0)){S=remote;fixSkin();persistLocal();applySkin();render();setSync('synced')}
+        else if(S.rev>0){flush()}
+        else setSync('synced');
+      });
+    });
+  }).catch(function(){ref=null;setSync('local')});
+}
+
+/* ---------- render ---------- */
+function renderHead(){
+  var d=parseK(VK);
+  $('#dow').textContent=d.toLocaleDateString('en-US',{weekday:'long'});
+  $('#dateline').textContent=d.toLocaleDateString('en-GB',{day:'numeric',month:'long'})+' '+d.getFullYear();
+  $('#next').disabled=VK>=TK;
+  $('#today').disabled=VK===TK;
+  var n=dayDone(VK), t=dayTotal();
+  $('#tag').textContent=(VK===TK?'today':'past day')+'  '+n+'/'+t+' done'+(t&&n===t?'  ✓ perfect day':'');
+  renderStreak();
+}
+function renderTasks(){
+  var mask=S.log[VK]||0, html='';
+  for(var i=0;i<10;i++){
+    var on=(mask>>i)&1;
+    html+='<li class="task'+(on?' done':'')+'" data-i="'+i+'">'+
+      '<button class="tick" data-act="tick" aria-pressed="'+(!!on)+'" aria-label="Task '+(i+1)+(on?' done':' not done')+'">✓</button>'+
+      '<input class="name" data-act="name" maxlength="60" value="'+esc(S.tasks[i])+'" placeholder="task '+(i+1)+'" aria-label="Task '+(i+1)+' name" autocomplete="off">'+
+      '</li>';
+  }
+  $('#tasks').innerHTML=html;
+}
+function renderStats(){
+  var ms=monthStat(MK), pct=ms.total?Math.round(ms.done/ms.total*100):0;
+  $('#pie').style.setProperty('--p',pct+'%');$('#pie').className='pie'+(ms.total?'':' empty');
+  $('#leg').innerHTML='<div class="big">'+pct+'%</div>'+
+    '<div><span class="sw a"></span>done '+ms.done+'</div>'+
+    '<div><span class="sw m"></span>missed '+(ms.total-ms.done)+'</div>'+
+    '<div class="dim">'+ms.days+(ms.days===1?' day':' days')+' counted</div>';
+  var y=+MK.slice(0,4), m=+MK.slice(5,7)-1, first=new Date(y,m,1), dim=new Date(y,m+1,0).getDate();
+  $('#mlabel').textContent=first.toLocaleDateString('en-US',{month:'long',year:'numeric'}).toLowerCase();
+  $('#mnext').disabled=MK>=TK.slice(0,7);
+  var html='', lead=(first.getDay()+6)%7, t=dayTotal();
+  for(var b=0;b<lead;b++) html+='<span class="blank"></span>';
+  for(var d=1;d<=dim;d++){
+    var k=MK+'-'+pad(d);
+    if(k>TK){html+='<button class="box fut" disabled aria-label="'+k+'">'+d+'</button>';continue}
+    var n=dayDone(k), st=dayState(k);
+    html+='<button class="box '+st+(k===VK?' sel':'')+'" data-k="'+k+'" title="'+k+': '+n+'/'+t+' done" aria-label="'+k+', '+n+' of '+t+' done">'+d+'</button>';
+  }
+  $('#boxes').innerHTML=html;
+}
+var heatScrolled=false;
+function renderHeat(){
+  var wk=-((TODAY.getDay()+6)%7), start=addDays(TODAY,wk-52*7), t=dayTotal(), cells='', months='', lastCol=-10, lastM=-1;
+  for(var i=0;i<53*7;i++){
+    var d=addDays(start,i), k=key(d), col=Math.floor(i/7);
+    if(i%7===0&&(d.getDate()<=7)&&d.getMonth()!==lastM&&col-lastCol>=3){
+      months+='<span style="grid-column:'+(col+1)+'">'+d.toLocaleDateString('en-US',{month:'short'}).toLowerCase()+'</span>';
+      lastCol=col;lastM=d.getMonth();
+    }
+    if(k>TK){cells+='<span class="c fut"></span>';continue}
+    var n=dayDone(k), st=dayState(k);
+    cells+='<button class="c '+st+(k===VK?' sel':'')+'" data-k="'+k+'" tabindex="-1" title="'+k+': '+n+'/'+t+' done" aria-label="'+k+', '+n+' of '+t+' done"></button>';
+  }
+  $('#hmm').innerHTML=months;
+  $('#hm').innerHTML=cells;
+  if(!heatScrolled){heatScrolled=true;var sc=$('#hmscroll');sc.scrollLeft=sc.scrollWidth}
+}
+function renderStreak(){
+  var cur=0, d=TODAY, t=dayTotal();
+  for(var i=0;i<4000;i++){var k=key(d); if(dayDone(k)>0)cur++; else if(i>0)break; d=addDays(d,-1);}
+  var best=0,run=0,perfect=0;
+  for(var x=parseK(S.start); key(x)<=TK; x=addDays(x,1)){
+    var n=dayDone(key(x));
+    if(n>0){run++;if(run>best)best=run}else run=0;
+    if(t&&n===t)perfect++;
+  }
+  $('#streak').innerHTML='<span>streak <b>'+cur+'</b> '+(cur===1?'day':'days')+'</span><span>best <b>'+best+'</b></span><span>perfect days <b>'+perfect+'</b></span>';
+}
+function applySkin(){document.documentElement.setAttribute('data-skin',S.skin);$('#cmdtxt').textContent='C:\\Users\\you> color '+S.skin}
+function renderThemes(){
+  var html='<span class="lead">$ color</span>';
+  SKINS.forEach(function(s){
+    html+='<button class="th" data-skin="'+s.id+'" aria-pressed="'+(S.skin===s.id)+'"><i class="dot" aria-hidden="true" style="--da:'+s.a+';--db:'+s.b+'"></i>'+esc(s.name)+'</button>';
+  });
+  $('#themes').innerHTML=html;
+}
+function setSkin(id){S.skin=id;applySkin();touch();renderThemes()}
+function nextSkin(){var i=SKINS.map(function(s){return s.id}).indexOf(S.skin);setSkin(SKINS[(i+1)%SKINS.length].id)}
+function render(){renderHead();renderTasks();renderStats();renderHeat();renderThemes()}
+
+/* ---------- actions ---------- */
+function tick(i){
+  var m=S.log[VK]||0; m^=1<<i;
+  if(m) S.log[VK]=m; else delete S.log[VK];
+  if(VK<S.start) S.start=VK;
+  touch();render();
+}
+function go(k){if(k>TK)return;VK=k;MK=k.slice(0,7);render()}
+$('#tasks').addEventListener('click',function(e){
+  var b=e.target.closest('[data-act="tick"]');if(!b)return;
+  tick(+b.closest('.task').getAttribute('data-i'));
+});
+$('#tasks').addEventListener('input',function(e){
+  var inp=e.target.closest('[data-act="name"]');if(!inp)return;
+  S.tasks[+inp.closest('.task').getAttribute('data-i')]=inp.value;
+  touch();renderHead();renderStats();renderHeat();
+});
+$('#hm').addEventListener('click',function(e){var b=e.target.closest('[data-k]');if(b)go(b.getAttribute('data-k'))});
+$('#themes').addEventListener('click',function(e){var b=e.target.closest('[data-skin]');if(b)setSkin(b.getAttribute('data-skin'))});
+
+var bkArmed=false;
+function bmsg(t){$('#bmsg').textContent=t}
+function backupText(){var o=JSON.parse(JSON.stringify(S));delete o.rev;return JSON.stringify(o)}
+$('#bcopy').addEventListener('click',function(){
+  var txt=backupText(), ta=$('#btxt');
+  ta.hidden=false;$('#bgorow').hidden=true;ta.value=txt;bkArmed=false;
+  var ok=function(){bmsg('copied. keep it in Notes or WhatsApp.')};
+  var fail=function(){ta.focus();ta.select();bmsg('tap and hold the text to copy it.')};
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(ok,fail)}
+    else fail();
+  }catch(e){fail()}
+});
+$('#brest').addEventListener('click',function(){
+  var ta=$('#btxt');ta.hidden=false;ta.value='';$('#bgorow').hidden=false;
+  bkArmed=false;$('#bgo').textContent='load this backup';ta.focus();
+  bmsg('paste your backup text, then tap load.');
+});
+$('#bgo').addEventListener('click',function(){
+  var o=null;try{o=JSON.parse($('#btxt').value.trim())}catch(e){}
+  if(!valid(o)){bmsg('that text is not a valid backup.');bkArmed=false;$('#bgo').textContent='load this backup';return}
+  if(!bkArmed){bkArmed=true;$('#bgo').textContent='sure? this replaces your data. tap again';return}
+  o.rev=0;if(!skinOk(o.skin))o.skin=S.skin;
+  S=o;applySkin();touch();render();
+  $('#btxt').hidden=true;$('#bgorow').hidden=true;bkArmed=false;bmsg('restored.');
+});
+$('#tasks').addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.tagName==='INPUT')e.target.blur()});
+$('#prev').addEventListener('click',function(){go(key(addDays(parseK(VK),-1)))});
+$('#next').addEventListener('click',function(){go(key(addDays(parseK(VK),1)))});
+$('#today').addEventListener('click',function(){go(TK)});
+$('#mprev').addEventListener('click',function(){var y=+MK.slice(0,4),m=+MK.slice(5,7)-2;var d=new Date(y,m,1);MK=d.getFullYear()+'-'+pad(d.getMonth()+1);renderStats()});
+$('#mnext').addEventListener('click',function(){var y=+MK.slice(0,4),m=+MK.slice(5,7);var d=new Date(y,m,1);var nk=d.getFullYear()+'-'+pad(d.getMonth()+1);if(nk>TK.slice(0,7))return;MK=nk;renderStats()});
+$('#boxes').addEventListener('click',function(e){var b=e.target.closest('[data-k]');if(b)go(b.getAttribute('data-k'))});
+document.addEventListener('keydown',function(e){
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  var tag=e.target&&e.target.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA')return;
+  if(/^[0-9]$/.test(e.key)){var i=e.key==='0'?9:+e.key-1;tick(i)}
+  else if(e.key==='t'){nextSkin()}
+});
+
+/* ---------- boot ---------- */
+S=loadLocal()||fresh();
+fixSkin();
+applySkin();
+render();
+setSync('start');
+bootSync();
+})();
+</script>
+
+</body>
+</html>
